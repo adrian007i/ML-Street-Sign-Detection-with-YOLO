@@ -1,78 +1,73 @@
 from ultralytics import YOLO
 import cv2
-import time
-from tqdm import tqdm  # For the progress bar
+from tqdm import tqdm
 
-# Load the YOLO model (replace 'ml_model_built_on_yolo.pt' with your model's path)
+# Load the YOLO model
 model = YOLO('ml_model_built_on_yolo.pt', verbose=False)
 
-# Start video capture from a video file
-video_path = 'demo_vid.mp4'  # Replace with your video file path
+# Open video file
+video_path = 'demo_vid.mp4'
 cap = cv2.VideoCapture(video_path)
 
 if not cap.isOpened():
     print("Error: Could not open video.")
     exit()
 
-# Get the total frame count for the progress bar
+# Video properties
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-# Get the video frame width, height, and FPS for the output video
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 fps = cap.get(cv2.CAP_PROP_FPS)
 
-# Set up the VideoWriter to save the output video
-output_video_path = 'output_video.mp4'  # Specify the output path
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for .mp4 file
+# Setup output video writer
+output_video_path = 'output_video_with_detections.mp4'
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
 
-frame_counter = 0  # Track the current frame number
-
-# Initialize the progress bar
+frame_counter = 0
 progress_bar = tqdm(total=total_frames, desc="Processing Frames", unit="frame")
-
-while True:
-    # Read a frame from the video
+i = 0
+while i < 10:
+    i += 1
     ret, frame = cap.read()
-    frame_counter += 1
-
     if not ret:
-        print("Reached the end of the video or error reading frame.")
         break
 
-    results = None
-    
-    # Run YOLO inference every 30 frames
+    frame_counter += 1
+    # Run inference every 2nd frame
     if frame_counter % 2 == 0:
         results = model(frame, verbose=False)
-        if results:
-            for result in results:
-                boxes = result.boxes.xyxy  # Get the bounding box coordinates
-                confidences = result.boxes.conf  # Get the confidence scores for each detection
+        detections_exist = False
 
-                for box, confidence in zip(boxes, confidences):
-                    x1, y1, x2, y2 = map(int, box[:4])  # Convert to int
-                    confidence_percentage = confidence.item() * 100  # Convert confidence to percentage
+        for result in results:
+            boxes = result.boxes.xyxy  # Bounding box coordinates
+            confidences = result.boxes.conf  # Confidence scores
 
-                    # Draw the rectangle around the detected object
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Draw bounding box
+            if len(boxes) > 0:
+                detections_exist = True  # Mark that detections are found
 
-                    # Display the confidence percentage
-                    label = f'{confidence_percentage:.2f}%'
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    cv2.putText(frame, label, (x1, y1 - 10), font, 0.5, (0, 255, 0), 2)
- 
-                out.write(frame) 
+            for box, confidence in zip(boxes, confidences):
+                x1, y1, x2, y2 = map(int, box[:4])  # Convert to integers
+                conf_percent = confidence
 
-    # Update the progress bar
+                # class_id = int(box.data[0][-1])
+                # print(model.names[class_id]) 
+                print(box.data[0][-1])
+
+                # Draw bounding box
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                # Draw confidence label
+                label = f'{conf_percent:.2f}%'
+                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+        # Save the frame only if detections existc
+        if detections_exist:
+            out.write(frame)
+
     progress_bar.update(1)
 
-# Release the progress bar
 progress_bar.close()
-
-# Release the video capture and writer objects
 cap.release()
 out.release()
 
-print(f"Video saved at {output_video_path}")
+print(f"Video with detections saved at {output_video_path}")
